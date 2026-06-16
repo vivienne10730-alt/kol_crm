@@ -1,0 +1,253 @@
+{% extends 'base.html' %}
+{% block title %}项目管理{% endblock %}
+{% block topbar_title %}项目管理{% endblock %}
+{% block topbar_actions %}
+<button class="btn btn-primary btn-sm" onclick="openModal('modal-project')">+ 新建项目</button>
+{% endblock %}
+
+{% block content %}
+
+<!-- 统计栏 -->
+<div id="stats-bar" style="margin-bottom:20px"></div>
+
+<!-- 筛选 -->
+<div class="filter-bar" style="margin-bottom:16px">
+  <select id="filter-brand" onchange="filterProjects()" style="width:160px">
+    <option value="">全部品牌</option>
+    {% for b in brands %}
+    <option value="{{ b.id }}">{{ b.name }}</option>
+    {% endfor %}
+  </select>
+  <select id="filter-project" onchange="loadStats()" style="width:220px">
+    <option value="">全部项目</option>
+    {% for p in projects %}
+    <option value="{{ p.id }}">{{ p.brand_name }} · {{ p.name }}</option>
+    {% endfor %}
+  </select>
+  <button class="btn btn-secondary btn-sm" onclick="loadStats()">刷新统计</button>
+</div>
+
+<div class="card">
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>项目名称</th>
+          <th>品牌</th>
+          <th>产品</th>
+          <th>平台</th>
+          <th>负责人</th>
+          <th>周期</th>
+          <th>备注</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in projects %}
+        <tr data-brand="{{ p.brand_id }}">
+          <td style="font-weight:500">{{ p.name }}</td>
+          <td>
+            {% if p.brand_name %}
+            <span class="badge badge-blue">{{ p.brand_name }}</span>
+            {% else %}<span class="text-muted">—</span>{% endif %}
+          </td>
+          <td style="font-size:12px;color:var(--muted)">{{ p.product_name or '—' }}</td>
+          <td style="font-size:12px">{{ p.platform or '—' }}</td>
+          <td style="font-size:12px">{{ p.owner or '—' }}</td>
+          <td style="font-size:12px;color:var(--muted)">
+            {% if p.start_date %}{{ p.start_date }}{% endif %}
+            {% if p.start_date and p.end_date %} → {% endif %}
+            {% if p.end_date %}{{ p.end_date }}{% endif %}
+            {% if not p.start_date and not p.end_date %}—{% endif %}
+          </td>
+          <td style="font-size:12px;color:var(--muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+            {{ p.notes or '' }}
+          </td>
+          <td>
+            <div style="display:flex;gap:6px">
+              <button class="btn btn-sm btn-secondary" onclick="editProject({{ p|tojson|safe }})">编辑</button>
+              <form method="POST" action="/projects/delete/{{ p.id }}" style="display:inline"
+                    onsubmit="return confirm('删除后合作记录将一并删除，确认？')">
+                <button class="btn btn-sm btn-danger">删除</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" style="text-align:center;padding:40px;color:var(--muted)">暂无项目，点击右上角新建</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Modal 新增/编辑项目 -->
+<div class="modal-backdrop" id="modal-project">
+  <div class="modal">
+    <div class="modal-header">
+      <span id="project-modal-title">新建项目</span>
+      <button onclick="closeModal('modal-project')" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;margin-left:auto">×</button>
+    </div>
+    <form method="POST" action="/projects/save">
+      <input type="hidden" name="id" id="project-id">
+      <div class="modal-body">
+        <div class="form-grid">
+          <div class="form-group full">
+            <label>项目名称 *</label>
+            <input name="name" id="proj-name" placeholder="如：KNKA APH3000 Q3 Germany" required>
+          </div>
+          <div class="form-group">
+            <label>品牌</label>
+            <select name="brand_id" id="proj-brand" onchange="filterProductsByBrand(this.value)">
+              <option value="">选择品牌</option>
+              {% for b in brands %}
+              <option value="{{ b.id }}">{{ b.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group">
+            <label>产品</label>
+            <select name="product_id" id="proj-product">
+              <option value="">选择产品</option>
+              {% for p in products %}
+              <option value="{{ p.id }}" data-brand="{{ p.brand_id }}">{{ p.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group">
+            <label>平台</label>
+            <select name="platform" id="proj-platform">
+              <option>YouTube</option>
+              <option>TikTok</option>
+              <option>Instagram</option>
+              <option>多平台</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>负责人</label>
+            <input name="owner" id="proj-owner" placeholder="如：Vivi">
+          </div>
+          <div class="form-group">
+            <label>开始日期</label>
+            <input type="date" name="start_date" id="proj-start">
+          </div>
+          <div class="form-group">
+            <label>结束日期</label>
+            <input type="date" name="end_date" id="proj-end">
+          </div>
+          <div class="form-group full">
+            <label>备注</label>
+            <textarea name="notes" id="proj-notes" rows="2"></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('modal-project')">取消</button>
+        <button type="submit" class="btn btn-primary">保存</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+// ── 统计看板 ────────────────────────────────────────────────
+async function loadStats() {
+  const brandId  = document.getElementById('filter-brand').value;
+  const projId   = document.getElementById('filter-project').value;
+  const params   = new URLSearchParams();
+  if (brandId) params.set('brand_id', brandId);
+  if (projId)  params.set('project_id', projId);
+
+  const r = await fetch('/api/stats?' + params.toString());
+  const d = await r.json();
+
+  const fmt = (n) => n ? '$' + Number(n).toLocaleString('en', {maximumFractionDigits:0}) : '$0';
+  const byCurrency = (d.by_currency || []).map(c =>
+    `${c.amount_currency} ${Number(c.total).toLocaleString('en',{maximumFractionDigits:0})}`
+  ).join(' · ');
+
+  document.getElementById('stats-bar').innerHTML = `
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-label">合作达人</div>
+        <div class="stat-value text-accent">${d.creator_count || 0}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">合作记录</div>
+        <div class="stat-value">${d.collab_count || 0}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">已发布</div>
+        <div class="stat-value text-green">${d.posted || 0}</div>
+        <div class="stat-sub">条内容</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">未发布</div>
+        <div class="stat-value text-amber">${d.pending || 0}</div>
+        <div class="stat-sub">进行中</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">总花费</div>
+        <div class="stat-value" style="font-size:18px">${fmt(d.total_spend)}</div>
+        <div class="stat-sub">${byCurrency || '—'}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">已付 / 未付</div>
+        <div class="stat-value" style="font-size:16px">
+          <span class="text-green">${fmt(d.total_paid)}</span>
+          <span style="font-size:12px;color:var(--muted)"> / </span>
+          <span class="text-red">${fmt(d.unpaid)}</span>
+        </div>
+      </div>
+    </div>`;
+}
+
+// ── 按品牌筛选项目行 ────────────────────────────────────────
+function filterProjects() {
+  const brandId = document.getElementById('filter-brand').value;
+  document.querySelectorAll('tbody tr[data-brand]').forEach(row => {
+    row.style.display = (!brandId || row.dataset.brand === brandId) ? '' : 'none';
+  });
+  loadStats();
+}
+
+// ── 产品下拉联动品牌 ────────────────────────────────────────
+function filterProductsByBrand(brandId) {
+  const sel = document.getElementById('proj-product');
+  sel.innerHTML = '<option value="">选择产品</option>';
+  document.querySelectorAll('#proj-product-all option').forEach(opt => {
+    if (!brandId || opt.dataset.brand === brandId) {
+      sel.appendChild(opt.cloneNode(true));
+    }
+  });
+}
+
+// ── Modal ────────────────────────────────────────────────────
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+function editProject(p) {
+  document.getElementById('project-id').value   = p.id;
+  document.getElementById('proj-name').value    = p.name || '';
+  document.getElementById('proj-brand').value   = p.brand_id || '';
+  document.getElementById('proj-platform').value= p.platform || 'YouTube';
+  document.getElementById('proj-owner').value   = p.owner || '';
+  document.getElementById('proj-start').value   = p.start_date || '';
+  document.getElementById('proj-end').value     = p.end_date || '';
+  document.getElementById('proj-notes').value   = p.notes || '';
+  filterProductsByBrand(p.brand_id);
+  setTimeout(() => {
+    document.getElementById('proj-product').value = p.product_id || '';
+  }, 50);
+  document.getElementById('project-modal-title').textContent = '编辑项目';
+  openModal('modal-project');
+}
+
+document.querySelectorAll('.modal-backdrop').forEach(bd =>
+  bd.addEventListener('click', e => { if (e.target === bd) bd.classList.remove('open'); })
+);
+
+// 初始加载统计
+loadStats();
+</script>
+{% endblock %}

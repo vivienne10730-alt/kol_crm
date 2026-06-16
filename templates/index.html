@@ -1,0 +1,97 @@
+{% extends 'base.html' %}
+{% block title %}首页看板{% endblock %}
+{% block topbar_title %}首页看板{% endblock %}
+
+{% block content %}
+<div class="stat-grid">
+  <div class="stat-card">
+    <div class="stat-label">达人库</div>
+    <div class="stat-value text-accent">{{ stats.total_creators or 0 }}</div>
+    <div class="stat-sub">已入库</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">合作记录</div>
+    <div class="stat-value">{{ stats.total_collabs or 0 }}</div>
+    <div class="stat-sub">总计</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">已发布</div>
+    <div class="stat-value text-green">{{ stats.posted or 0 }}</div>
+    <div class="stat-sub">条内容</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">进行中</div>
+    <div class="stat-value text-amber">{{ stats.pending or 0 }}</div>
+    <div class="stat-sub">待发布</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">总花费</div>
+    <div class="stat-value" style="font-size:20px">${{ "{:,.0f}".format(stats.total_spend or 0) }}</div>
+    <div class="stat-sub">已付 ${{ "{:,.0f}".format(stats.total_paid or 0) }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">今日提醒</div>
+    <div class="stat-value text-red">{{ reminders|length }}</div>
+    <div class="stat-sub">待跟进</div>
+  </div>
+</div>
+
+<div class="grid-2">
+  <!-- 今日待跟进 -->
+  <div class="card">
+    <div class="card-header">🔔 今日待跟进 <span class="badge badge-red" style="margin-left:auto">{{ reminders|length }}</span></div>
+    <div class="card-body" style="padding:0">
+      {% if reminders %}
+      <table>
+        <thead><tr><th>达人</th><th>提醒内容</th><th>日期</th><th></th></tr></thead>
+        <tbody>
+          {% for r in reminders %}
+          <tr>
+            <td><a href="/creator/{{ r.channel_id }}" class="text-accent" style="text-decoration:none">{{ r.nickname }}</a></td>
+            <td>{{ r.content or '—' }}</td>
+            <td class="text-muted" style="font-size:12px">{{ r.remind_date }}</td>
+            <td>
+              <button class="btn btn-sm btn-secondary" onclick="doneReminder({{ r.id }}, this)">完成</button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div style="padding:32px;text-align:center;color:var(--muted)">🎉 今日无待跟进</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- 本周将发布 -->
+  <div class="card">
+    <div class="card-header">📅 本周发布计划 <span class="badge badge-blue" style="margin-left:auto">{{ publishing_soon|length }}</span></div>
+    <div class="card-body" style="padding:0">
+      {% if publishing_soon %}
+      <table>
+        <thead><tr><th>达人</th><th>项目</th><th>品牌</th><th>发布日</th></tr></thead>
+        <tbody>
+          {% for p in publishing_soon %}
+          <tr>
+            <td>{{ p.nickname }}</td>
+            <td style="font-size:12px;color:var(--muted)">{{ p.project_name }}</td>
+            <td><span class="badge badge-blue">{{ p.brand_name }}</span></td>
+            <td style="font-size:12px">{{ p.publish_date }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div style="padding:32px;text-align:center;color:var(--muted)">本周无发布计划</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<script>
+async function doneReminder(id, btn) {
+  await fetch(`/reminder/${id}/done`, {method:'POST'});
+  btn.closest('tr').remove();
+}
+</script>
+{% endblock %}

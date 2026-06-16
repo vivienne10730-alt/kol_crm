@@ -1,0 +1,129 @@
+{% extends 'base.html' %}
+{% block title %}系统配置{% endblock %}
+{% block topbar_title %}阶段 / 状态 / 类目{% endblock %}
+
+{% block content %}
+<div class="grid-3" style="align-items:start">
+
+  <!-- 项目进度阶段 -->
+  <div class="card">
+    <div class="card-header">
+      📊 项目进度阶段
+      <button class="btn btn-sm btn-primary" style="margin-left:auto" onclick="openAdd('stage')">+ 新增</button>
+    </div>
+    <div id="stage-list">
+      {% for s in stages %}
+      <div class="config-row" style="display:flex;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid var(--border)">
+        <span style="width:10px;height:10px;border-radius:50%;background:{{ s.color }};flex-shrink:0"></span>
+        <span style="flex:1;font-size:13px">{{ s.name }}</span>
+        <input type="color" value="{{ s.color }}" style="width:28px;height:28px;padding:0;border:none;background:none;cursor:pointer"
+          onchange="updateColor('stage',{{ s.id }},this.value,'{{ s.name }}')">
+        <button class="btn btn-sm btn-danger" onclick="deleteConfig('stage',{{ s.id }})">×</button>
+      </div>
+      {% endfor %}
+    </div>
+    <div id="add-stage" style="display:none;padding:12px 16px;border-top:1px solid var(--border)">
+      <div class="input-group">
+        <input id="new-stage-name" placeholder="阶段名称">
+        <input type="color" id="new-stage-color" value="#6B7280" style="width:40px;padding:4px">
+      </div>
+      <div style="display:flex;gap:6px;margin-top:8px">
+        <button class="btn btn-primary btn-sm flex-1" onclick="addConfig('stage')">保存</button>
+        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('add-stage').style.display='none'">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 达人状态 -->
+  <div class="card">
+    <div class="card-header">
+      🏷 达人状态
+      <button class="btn btn-sm btn-primary" style="margin-left:auto" onclick="openAdd('status')">+ 新增</button>
+    </div>
+    <div id="status-list">
+      {% for s in statuses %}
+      <div class="config-row" style="display:flex;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid var(--border)">
+        <span style="width:10px;height:10px;border-radius:50%;background:{{ s.color }};flex-shrink:0"></span>
+        <span style="flex:1;font-size:13px">{{ s.name }}</span>
+        <input type="color" value="{{ s.color }}" style="width:28px;height:28px;padding:0;border:none;background:none;cursor:pointer"
+          onchange="updateColor('status',{{ s.id }},this.value,'{{ s.name }}')">
+        <button class="btn btn-sm btn-danger" onclick="deleteConfig('status',{{ s.id }})">×</button>
+      </div>
+      {% endfor %}
+    </div>
+    <div id="add-status" style="display:none;padding:12px 16px;border-top:1px solid var(--border)">
+      <div class="input-group">
+        <input id="new-status-name" placeholder="状态名称">
+        <input type="color" id="new-status-color" value="#6B7280" style="width:40px;padding:4px">
+      </div>
+      <div style="display:flex;gap:6px;margin-top:8px">
+        <button class="btn btn-primary btn-sm flex-1" onclick="addConfig('status')">保存</button>
+        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('add-status').style.display='none'">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 类目 -->
+  <div class="card">
+    <div class="card-header">
+      📂 达人类目
+      <button class="btn btn-sm btn-primary" style="margin-left:auto" onclick="openAdd('category')">+ 新增</button>
+    </div>
+    <div id="category-list">
+      {% for c in categories %}
+      <div class="config-row" style="display:flex;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid var(--border)">
+        <span style="flex:1;font-size:13px">{{ c.name }}</span>
+        <button class="btn btn-sm btn-danger" onclick="deleteConfig('category',{{ c.id }})">×</button>
+      </div>
+      {% endfor %}
+    </div>
+    <div id="add-category" style="display:none;padding:12px 16px;border-top:1px solid var(--border)">
+      <input id="new-category-name" placeholder="类目名称" style="margin-bottom:8px">
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-primary btn-sm flex-1" onclick="addConfig('category')">保存</button>
+        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('add-category').style.display='none'">取消</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function openAdd(type) {
+  document.getElementById('add-' + type).style.display = 'block';
+  document.getElementById('new-' + type + '-name').focus();
+}
+
+async function addConfig(type) {
+  const nameEl = document.getElementById('new-' + type + '-name');
+  const colorEl = document.getElementById('new-' + type + '-color');
+  const name = nameEl.value.trim();
+  if (!name) return;
+
+  const payload = { name };
+  if (colorEl) payload.color = colorEl.value;
+
+  await fetch('/api/' + (type === 'category' ? 'categories' : type + 's'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  location.reload();
+}
+
+async function updateColor(type, id, color, name) {
+  const endpoint = type === 'stage' ? '/api/stages' : '/api/statuses';
+  await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id, name, color })
+  });
+}
+
+async function deleteConfig(type, id) {
+  if (!confirm('确认删除？')) return;
+  const endpoints = { stage: '/api/stages', status: '/api/statuses', category: '/api/categories' };
+  await fetch(endpoints[type] + '/' + id, { method: 'DELETE' });
+  location.reload();
+}
+</script>
+{% endblock %}

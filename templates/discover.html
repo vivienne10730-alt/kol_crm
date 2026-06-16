@@ -1,0 +1,344 @@
+{% extends 'base.html' %}
+{% block title %}达人发现{% endblock %}
+{% block topbar_title %}达人发现{% endblock %}
+
+{% block content %}
+<div class="grid-2" style="margin-bottom:20px;align-items:start">
+  <!-- 搜索面板 -->
+  <div class="card">
+    <div class="card-header">🔍 搜索方式</div>
+    <div class="card-body">
+      <!-- Mode tabs -->
+      <div style="display:flex;gap:6px;margin-bottom:16px">
+        <button class="btn btn-primary btn-sm mode-btn active" data-mode="keyword">关键词搜索</button>
+        <button class="btn btn-secondary btn-sm mode-btn" data-mode="video">视频相似达人</button>
+        <button class="btn btn-secondary btn-sm mode-btn" data-mode="channel">频道相似达人</button>
+      </div>
+
+      <!-- keyword -->
+      <div id="mode-keyword" class="mode-panel">
+        <div class="form-group">
+          <label>关键词（每行一个）</label>
+          <textarea id="kw-input" rows="5" placeholder="air purifier&#10;dehumidifier&#10;mom lifestyle&#10;family home"></textarea>
+        </div>
+      </div>
+
+      <!-- video -->
+      <div id="mode-video" class="mode-panel" style="display:none">
+        <div class="form-group">
+          <label>YouTube 视频链接</label>
+          <input id="video-url" type="text" placeholder="https://www.youtube.com/watch?v=...">
+        </div>
+        <p style="font-size:12px;color:var(--muted);margin-top:8px">通过视频标签和类目发现相似频道</p>
+      </div>
+
+      <!-- channel -->
+      <div id="mode-channel" class="mode-panel" style="display:none">
+        <div class="form-group">
+          <label>YouTube 频道链接</label>
+          <input id="channel-url" type="text" placeholder="https://www.youtube.com/@channelname">
+        </div>
+        <p style="font-size:12px;color:var(--muted);margin-top:8px">通过该频道最近视频发现相似频道</p>
+      </div>
+
+      <div style="display:flex;gap:8px;margin-top:14px">
+        <button class="btn btn-primary flex-1" id="search-btn" onclick="doSearch()">
+          🔍 开始搜索
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI 评分配置 -->
+  <div class="card">
+    <div class="card-header">🤖 AI 匹配配置</div>
+    <div class="card-body">
+      <div class="form-group" style="margin-bottom:12px">
+        <label>品牌（留空=自动匹配所有）</label>
+        <select id="score-brand">
+          <option value="">全部品牌</option>
+          {% for b in brands %}
+          <option value="{{ b.id }}">{{ b.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>产品（可选）</label>
+        <select id="score-product">
+          <option value="">不限产品</option>
+          {% for p in products %}
+          <option value="{{ p.id }}" data-brand="{{ p.brand_id }}">{{ p.brand_name }} · {{ p.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <hr class="divider">
+      <div class="form-group">
+        <label>加入项目</label>
+        <select id="target-project">
+          <option value="">暂不加入项目</option>
+          {% for p in projects %}
+          <option value="{{ p.id }}">{{ p.brand_name }} · {{ p.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 搜索进度 -->
+<div id="search-progress" style="display:none;margin-bottom:16px">
+  <div class="card">
+    <div class="card-body" style="text-align:center;padding:24px">
+      <div style="font-size:24px;margin-bottom:8px">⏳</div>
+      <div style="font-weight:600;margin-bottom:4px">正在搜索达人...</div>
+      <div style="color:var(--muted);font-size:13px">通过 YouTube API 获取频道数据，请稍候</div>
+    </div>
+  </div>
+</div>
+
+<!-- 搜索结果 -->
+<div id="results-section" style="display:none">
+  <div class="card">
+    <div class="card-header">
+      搜索结果
+      <span id="result-count" class="badge badge-blue" style="margin-left:8px"></span>
+      <div style="margin-left:auto;display:flex;gap:8px">
+        <button class="btn btn-sm btn-secondary" onclick="selectAll()">全选</button>
+        <button class="btn btn-sm btn-secondary" onclick="selectNone()">取消</button>
+        <button class="btn btn-sm btn-primary" onclick="batchImport()">加入达人库</button>
+        <button class="btn btn-sm btn-secondary" onclick="batchAddProject()">加入项目</button>
+        <button class="btn btn-sm btn-secondary" onclick="batchScore()">🤖 批量评分</button>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:36px"><input type="checkbox" id="check-all" onchange="toggleAll(this)"></th>
+            <th>达人</th>
+            <th>国家</th>
+            <th>粉丝数</th>
+            <th>均播（近10）</th>
+            <th>更新频率</th>
+            <th>邮箱</th>
+            <th>AI 匹配</th>
+            <th>状态</th>
+          </tr>
+        </thead>
+        <tbody id="results-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+let currentMode = 'keyword';
+let resultData = [];
+
+// Mode switch
+document.querySelectorAll('.mode-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.mode-btn').forEach(b => {
+      b.className = b === btn ? 'btn btn-primary btn-sm mode-btn active' : 'btn btn-secondary btn-sm mode-btn';
+    });
+    document.querySelectorAll('.mode-panel').forEach(p => p.style.display = 'none');
+    currentMode = btn.dataset.mode;
+    document.getElementById('mode-' + currentMode).style.display = 'block';
+  });
+});
+
+async function doSearch() {
+  const btn = document.getElementById('search-btn');
+  btn.disabled = true;
+  btn.textContent = '搜索中...';
+  document.getElementById('search-progress').style.display = 'block';
+  document.getElementById('results-section').style.display = 'none';
+
+  let payload = { mode: currentMode };
+  if (currentMode === 'keyword') payload.keywords = document.getElementById('kw-input').value;
+  if (currentMode === 'video') payload.url = document.getElementById('video-url').value;
+  if (currentMode === 'channel') payload.url = document.getElementById('channel-url').value;
+
+  try {
+    const r = await fetch('/api/search', {
+      method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload)
+    });
+    const data = await r.json();
+    if (data.error) { alert(data.error); return; }
+    resultData = data.results;
+    renderResults(data.results);
+  } catch(e) {
+    alert('搜索失败：' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🔍 开始搜索';
+    document.getElementById('search-progress').style.display = 'none';
+  }
+}
+
+function renderResults(results) {
+  const tbody = document.getElementById('results-body');
+  document.getElementById('result-count').textContent = results.length + ' 个';
+  document.getElementById('results-section').style.display = 'block';
+
+  tbody.innerHTML = results.map((c, i) => {
+    const existsBadge = c.exists
+      ? `<span class="badge ${c.is_archived ? 'badge-red' : 'badge-amber'}">${c.is_archived ? '已归档:'+c.archive_reason : '已存在:'+c.status}</span>`
+      : '<span class="badge badge-green">新</span>';
+
+    const scoreHtml = c.ai_score
+      ? `<div style="display:flex;align-items:center;gap:6px">
+          <div class="score-ring" style="border-color:${scoreColor(c.ai_score)};color:${scoreColor(c.ai_score)}">${c.ai_score}</div>
+          <div style="font-size:11px;color:var(--muted)">${c.ai_brand||''}</div>
+        </div>`
+      : `<button class="btn btn-sm btn-secondary" onclick="scoreSingle('${c.channel_id}', ${i})">评分</button>`;
+
+    return `<tr data-id="${c.channel_id}">
+      <td><input type="checkbox" class="row-check" value="${c.channel_id}" ${c.exists?'disabled':''}></td>
+      <td>
+        <div style="display:flex;align-items:center;gap:10px">
+          ${c.thumbnail_url ? `<img src="${c.thumbnail_url}" class="avatar">` : '<div class="avatar"></div>'}
+          <div>
+            <div style="font-weight:500">${c.nickname||c.channel_id}</div>
+            <a href="${c.channel_url||'https://www.youtube.com/channel/'+c.channel_id}" target="_blank" style="font-size:11px;color:var(--muted)">↗ YouTube</a>
+          </div>
+        </div>
+      </td>
+      <td>
+        <input type="text" value="${c.country||''}" placeholder="国家" style="width:70px;padding:4px 6px;font-size:12px"
+          onchange="updateField('${c.channel_id}','country',this.value)">
+      </td>
+      <td>${fmtNum(c.subscriber_count)}</td>
+      <td>${fmtNum(c.avg_views)}</td>
+      <td style="font-size:12px;color:var(--muted)">
+        7天:${c.update_7d||0} / 30天:${c.update_30d||0} / 90天:${c.update_90d||0}
+      </td>
+      <td>
+        <input type="text" value="${c.email||''}" placeholder="邮箱" style="width:150px;padding:4px 6px;font-size:12px"
+          onchange="updateField('${c.channel_id}','email',this.value)">
+      </td>
+      <td id="score-cell-${i}">${scoreHtml}</td>
+      <td>${existsBadge}</td>
+    </tr>`;
+  }).join('');
+}
+
+function scoreColor(s) {
+  if (s >= 80) return 'var(--green)';
+  if (s >= 60) return 'var(--amber)';
+  return 'var(--red)';
+}
+
+function fmtNum(n) {
+  if (!n) return '—';
+  if (n >= 1000000) return (n/1000000).toFixed(1) + 'M';
+  if (n >= 1000) return (n/1000).toFixed(1) + 'K';
+  return n;
+}
+
+function updateField(channelId, field, value) {
+  const item = resultData.find(c => c.channel_id === channelId);
+  if (item) item[field] = value;
+}
+
+async function scoreSingle(channelId, idx) {
+  const cell = document.getElementById('score-cell-' + idx);
+  cell.innerHTML = '<span style="color:var(--muted);font-size:12px">评分中...</span>';
+
+  // 先确保入库（临时）
+  await importCreator(resultData[idx]);
+
+  const r = await fetch(`/api/score/${channelId}`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      brand_id: document.getElementById('score-brand').value || null,
+      product_id: document.getElementById('score-product').value || null,
+    })
+  });
+  const data = await r.json();
+  resultData[idx].ai_score = data.score;
+  resultData[idx].ai_brand = data.brand;
+
+  cell.innerHTML = `<div style="display:flex;align-items:center;gap:6px">
+    <div class="score-ring" style="border-color:${scoreColor(data.score)};color:${scoreColor(data.score)}">${data.score}</div>
+    <div style="font-size:11px">
+      <div style="color:var(--text);font-weight:500">${data.brand}</div>
+      <div style="color:var(--muted)">${(data.reasons||[]).slice(0,2).join(' · ')}</div>
+    </div>
+  </div>`;
+}
+
+async function importCreator(c) {
+  await fetch('/api/creators/import', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({creators: [c]})
+  });
+}
+
+async function batchImport() {
+  const checked = getChecked();
+  if (!checked.length) return alert('请先勾选达人');
+  const creators = resultData.filter(c => checked.includes(c.channel_id));
+  const r = await fetch('/api/creators/import', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({creators})
+  });
+  const d = await r.json();
+  showToast(`✓ 已加入达人库：${d.added} 个`);
+}
+
+async function batchAddProject() {
+  const checked = getChecked();
+  const proj = document.getElementById('target-project').value;
+  if (!checked.length) return alert('请先勾选达人');
+  if (!proj) return alert('请选择目标项目');
+  await fetch('/api/creators/import', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({creators: resultData.filter(c => checked.includes(c.channel_id))})
+  });
+  const r = await fetch('/api/creators/add_to_project', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({channel_ids: checked, project_id: proj})
+  });
+  const d = await r.json();
+  showToast(`✓ 已加入项目：${d.added} 个`);
+}
+
+async function batchScore() {
+  const checked = getChecked();
+  if (!checked.length) return alert('请先勾选达人');
+  // 先全部入库
+  const creators = resultData.filter(c => checked.includes(c.channel_id));
+  await fetch('/api/creators/import', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({creators})
+  });
+  await fetch('/api/score/batch', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      channel_ids: checked,
+      brand_id: document.getElementById('score-brand').value || null,
+      product_id: document.getElementById('score-product').value || null,
+    })
+  });
+  showToast('🤖 批量评分已在后台启动...');
+}
+
+function getChecked() {
+  return [...document.querySelectorAll('.row-check:checked:not(:disabled)')].map(c => c.value);
+}
+function selectAll() { document.querySelectorAll('.row-check:not(:disabled)').forEach(c => c.checked = true); }
+function selectNone() { document.querySelectorAll('.row-check').forEach(c => c.checked = false); }
+function toggleAll(cb) { document.querySelectorAll('.row-check:not(:disabled)').forEach(c => c.checked = cb.checked); }
+
+function showToast(msg) {
+  const t = document.createElement('div');
+  t.className = 'toast success';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  Object.assign(t.style, {position:'fixed',top:'16px',right:'16px',zIndex:'9999'});
+  setTimeout(() => t.remove(), 3000);
+}
+</script>
+{% endblock %}

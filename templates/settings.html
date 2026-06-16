@@ -1,0 +1,45 @@
+{% extends 'base.html' %}
+{% block title %}API 设置{% endblock %}
+{% block topbar_title %}API 设置{% endblock %}
+{% block content %}
+<div style="max-width:560px">
+<form method="POST" class="card">
+  <div class="card-header">🔑 YouTube API</div>
+  <div class="card-body">
+    <div class="form-group">
+      <label>API Key</label>
+      <input name="yt_api_key" value="{{ cfg.get('yt_api_key','') }}" placeholder="AIza...">
+    </div>
+  </div>
+  <div class="card-header" style="border-top:1px solid var(--border)">🤖 AI API</div>
+  <div class="card-body">
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Provider</label>
+        <select name="ai_provider">
+          {% for p in ['claude','openai','gemini','deepseek'] %}
+          <option value="{{ p }}" {% if cfg.get('ai_provider')==p %}selected{% endif %}>{{ p }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Model</label>
+        <input name="ai_model" value="{{ cfg.get('ai_model','claude-sonnet-4-20250514') }}">
+      </div>
+      <div class="form-group full">
+        <label>Base URL</label>
+        <input name="ai_base_url" value="{{ cfg.get('ai_base_url','https://api.anthropic.com') }}">
+      </div>
+      <div class="form-group full">
+        <label>API Key</label>
+        <input name="ai_api_key" type="password" value="{{ cfg.get('ai_api_key','') }}" placeholder="sk-...">
+      </div>
+    </div>
+  </div>
+  <div class="card-body" style="border-top:1px solid var(--border)">
+    <button type="submit" class="btn btn-primary">保存设置</button>
+    <p style="margin-top:10px;font-size:12px;color:var(--muted)">局域网访问地址：运行后访问 <strong>http://[本机IP]:5000</strong></p>
+  </div>
+</form>
+</div>
+{% endblock %}

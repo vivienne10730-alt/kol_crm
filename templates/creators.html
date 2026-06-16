@@ -1,0 +1,200 @@
+{% extends 'base.html' %}
+{% block title %}达人库{% endblock %}
+{% block topbar_title %}达人库{% endblock %}
+{% block topbar_actions %}
+<a href="/discover" class="btn btn-primary btn-sm">+ 发现达人</a>
+{% endblock %}
+
+{% block content %}
+<!-- 筛选后统计栏 -->
+<div class="stat-grid" style="margin-bottom:16px">
+  <div class="stat-card">
+    <div class="stat-label">筛选结果</div>
+    <div class="stat-value text-accent">{{ creators|length }}</div>
+    <div class="stat-sub">位达人</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">总花费</div>
+    <div class="stat-value" style="font-size:18px">${{ "{:,.0f}".format(stats.total_spend or 0) }}</div>
+    <div class="stat-sub">已付 ${{ "{:,.0f}".format(stats.total_paid or 0) }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">已发布</div>
+    <div class="stat-value text-green">{{ stats.posted or 0 }}</div>
+    <div class="stat-sub">条内容</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">未发布</div>
+    <div class="stat-value text-amber">{{ stats.pending or 0 }}</div>
+    <div class="stat-sub">进行中</div>
+  </div>
+</div>
+
+<!-- 筛选栏 -->
+<form method="GET" class="filter-bar" style="margin-bottom:16px">
+  <input name="q" value="{{ filters.q or '' }}" placeholder="搜索昵称/邮箱" style="width:180px">
+  <select name="country">
+    <option value="">全部国家</option>
+    {% for c in countries %}
+    <option value="{{ c.country }}" {% if filters.country==c.country %}selected{% endif %}>{{ c.country }}</option>
+    {% endfor %}
+  </select>
+  <select name="status_id">
+    <option value="">全部状态</option>
+    {% for s in statuses %}
+    <option value="{{ s.id }}" {% if filters.status_id|string==s.id|string %}selected{% endif %}>{{ s.name }}</option>
+    {% endfor %}
+  </select>
+  <input name="min_subs" value="{{ filters.min_subs or '' }}" placeholder="粉丝≥" style="width:90px">
+  <input name="max_subs" value="{{ filters.max_subs or '' }}" placeholder="粉丝≤" style="width:90px">
+  <input name="min_score" value="{{ filters.min_score or '' }}" placeholder="AI分≥" style="width:80px">
+  <select name="has_email">
+    <option value="">邮箱</option>
+    <option value="1" {% if filters.has_email=='1' %}selected{% endif %}>有邮箱</option>
+  </select>
+  <select name="archived" style="width:100px">
+    <option value="0" {% if show_archived=='0' %}selected{% endif %}>正常</option>
+    <option value="1" {% if show_archived=='1' %}selected{% endif %}>归档</option>
+  </select>
+  <button type="submit" class="btn btn-primary btn-sm">筛选</button>
+  <a href="/creators" class="btn btn-secondary btn-sm">重置</a>
+</form>
+
+<!-- 批量操作 -->
+<div style="display:flex;gap:8px;margin-bottom:12px">
+  <button class="btn btn-sm btn-secondary" onclick="selectAll()">全选</button>
+  <button class="btn btn-sm btn-secondary" onclick="selectNone()">取消</button>
+  <select id="batch-project" style="width:200px;padding:5px 8px;font-size:13px">
+    <option value="">选择项目...</option>
+    {% for p in projects %}
+    <option value="{{ p.id }}">{{ p.brand_name }} · {{ p.name }}</option>
+    {% endfor %}
+  </select>
+  <button class="btn btn-sm btn-primary" onclick="batchAddProject()">加入项目</button>
+  <button class="btn btn-sm btn-secondary" onclick="batchScore()">🤖 批量评分</button>
+</div>
+
+<div class="card">
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th style="width:36px"><input type="checkbox" id="check-all" onchange="toggleAll(this)"></th>
+          <th>达人</th>
+          <th>国家</th>
+          <th>粉丝</th>
+          <th>均播</th>
+          <th>更新频率</th>
+          <th>邮箱</th>
+          <th>AI 匹配</th>
+          <th>状态</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in creators %}
+        <tr>
+          <td><input type="checkbox" class="row-check" value="{{ c.channel_id }}"></td>
+          <td>
+            <div class="flex items-center gap-2">
+              {% if c.thumbnail_url %}
+              <img src="{{ c.thumbnail_url }}" class="avatar">
+              {% else %}
+              <div class="avatar" style="background:var(--surface2)"></div>
+              {% endif %}
+              <div>
+                <a href="/creator/{{ c.channel_id }}" style="font-weight:500;color:var(--text);text-decoration:none">{{ c.nickname or c.channel_id }}</a>
+                {% if c.is_archived %}
+                <span class="badge badge-red" style="margin-left:4px">{{ c.archive_reason }}</span>
+                {% endif %}
+              </div>
+            </div>
+          </td>
+          <td class="text-muted">{{ c.country or '—' }}</td>
+          <td>{{ '{:,}'.format(c.subscriber_count or 0) }}</td>
+          <td>
+            {% if c.avg_views >= 1000000 %}{{ '%.1f'%(c.avg_views/1000000) }}M
+            {% elif c.avg_views >= 1000 %}{{ '%.1f'%(c.avg_views/1000) }}K
+            {% else %}{{ c.avg_views or '—' }}{% endif %}
+          </td>
+          <td style="font-size:12px;color:var(--muted)">
+            7天:{{ c.update_7d }} / 30天:{{ c.update_30d }} / 90天:{{ c.update_90d }}
+          </td>
+          <td style="font-size:12px">
+            {% if c.email %}<a href="mailto:{{ c.email }}" style="color:var(--accent)">{{ c.email }}</a>{% else %}<span class="text-muted">—</span>{% endif %}
+          </td>
+          <td>
+            {% if c.ai_score %}
+            {% set sc = c.ai_score %}
+            {% set col = 'var(--green)' if sc>=80 else ('var(--amber)' if sc>=60 else 'var(--red)') %}
+            <div class="flex items-center gap-2">
+              <div class="score-ring" style="border-color:{{ col }};color:{{ col }};width:36px;height:36px;font-size:12px">{{ sc }}</div>
+              {% if c.ai_reason %}
+                {% set ai = c.ai_reason|tojson|safe %}
+                <span style="font-size:11px;color:var(--muted)">{{ c.ai_reason[:40] if c.ai_reason else '' }}</span>
+              {% endif %}
+            </div>
+            {% else %}
+            <span class="text-muted" style="font-size:12px">未评分</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if c.status_name %}
+            <span class="badge" style="background:{{ c.status_color }}22;color:{{ c.status_color }}">{{ c.status_name }}</span>
+            {% else %}
+            <span class="text-muted" style="font-size:12px">—</span>
+            {% endif %}
+          </td>
+          <td>
+            <a href="/creator/{{ c.channel_id }}" class="btn btn-sm btn-secondary">详情</a>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="10" style="text-align:center;padding:40px;color:var(--muted)">暂无达人，前往「达人发现」搜索</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+function getChecked() {
+  return [...document.querySelectorAll('.row-check:checked')].map(c => c.value);
+}
+function selectAll() { document.querySelectorAll('.row-check').forEach(c => c.checked = true); }
+function selectNone() { document.querySelectorAll('.row-check').forEach(c => c.checked = false); }
+function toggleAll(cb) { document.querySelectorAll('.row-check').forEach(c => c.checked = cb.checked); }
+
+async function batchAddProject() {
+  const ids = getChecked();
+  const pid = document.getElementById('batch-project').value;
+  if (!ids.length) return alert('请先勾选达人');
+  if (!pid) return alert('请选择项目');
+  const r = await fetch('/api/creators/add_to_project', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({channel_ids: ids, project_id: pid})
+  });
+  const d = await r.json();
+  showToast(`✓ 已加入项目：${d.added} 个`);
+}
+
+async function batchScore() {
+  const ids = getChecked();
+  if (!ids.length) return alert('请先勾选达人');
+  await fetch('/api/score/batch', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({channel_ids: ids})
+  });
+  showToast('🤖 批量评分已在后台启动，稍后刷新页面查看结果');
+}
+
+function showToast(msg) {
+  const t = document.createElement('div');
+  t.className = 'toast success';
+  t.textContent = msg;
+  Object.assign(t.style, {position:'fixed',top:'16px',right:'16px',zIndex:'9999'});
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 3000);
+}
+</script>
+{% endblock %}

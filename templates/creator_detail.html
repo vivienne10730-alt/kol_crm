@@ -1,0 +1,459 @@
+{% extends 'base.html' %}
+{% block title %}{{ creator.nickname }}{% endblock %}
+{% block topbar_title %}
+  <a href="/creators" style="color:var(--muted);text-decoration:none">达人库</a>
+  <span style="color:var(--border);margin:0 8px">/</span>
+  {{ creator.nickname or creator.channel_id }}
+{% endblock %}
+
+{% block content %}
+<div style="display:grid;grid-template-columns:300px 1fr;gap:20px;align-items:start">
+
+  <!-- 左栏：基础信息 -->
+  <div style="display:flex;flex-direction:column;gap:16px">
+
+    <!-- 头像 & 核心数据 -->
+    <div class="card card-body" style="text-align:center">
+      {% if creator.thumbnail_url %}
+      <img src="{{ creator.thumbnail_url }}" style="width:72px;height:72px;border-radius:50%;margin-bottom:12px">
+      {% endif %}
+      <div style="font-size:16px;font-weight:700;margin-bottom:4px">{{ creator.nickname }}</div>
+      <a href="{{ creator.channel_url }}" target="_blank" style="font-size:12px;color:var(--accent)">↗ YouTube 频道</a>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px;text-align:left">
+        <div>
+          <div style="font-size:11px;color:var(--muted)">粉丝数</div>
+          <div style="font-weight:600">
+            {% if creator.subscriber_count >= 1000000 %}{{ '%.1f'%(creator.subscriber_count/1000000) }}M
+            {% elif creator.subscriber_count >= 1000 %}{{ '%.1f'%(creator.subscriber_count/1000) }}K
+            {% else %}{{ creator.subscriber_count }}{% endif %}
+          </div>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--muted)">均播（近10）</div>
+          <div style="font-weight:600">
+            {% if creator.avg_views >= 1000000 %}{{ '%.1f'%(creator.avg_views/1000000) }}M
+            {% elif creator.avg_views >= 1000 %}{{ '%.1f'%(creator.avg_views/1000) }}K
+            {% else %}{{ creator.avg_views or '—' }}{% endif %}
+          </div>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--muted)">更新频率</div>
+          <div style="font-size:12px">7天:{{ creator.update_7d }} / 30天:{{ creator.update_30d }}</div>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--muted)">国家</div>
+          <div style="font-weight:500">{{ creator.country or '—' }}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- AI 评分 -->
+    {% if creator.ai_score %}
+    <div class="card card-body">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+        {% set sc = creator.ai_score %}
+        {% set col = 'var(--green)' if sc>=80 else ('var(--amber)' if sc>=60 else 'var(--red)') %}
+        <div style="width:56px;height:56px;border-radius:50%;border:2px solid {{ col }};display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:{{ col }}">{{ sc }}</div>
+        <div>
+          <div style="font-size:11px;color:var(--muted)">AI 匹配度</div>
+          <div style="font-weight:600">{{ ai_data.brand or '—' }}</div>
+        </div>
+        <button class="btn btn-sm btn-secondary" style="margin-left:auto" onclick="reScore()">重新评分</button>
+      </div>
+      {% if ai_data.reasons %}
+      <div style="font-size:12px;color:var(--muted);margin-bottom:6px">推荐原因</div>
+      <ul style="font-size:13px;list-style:none;display:flex;flex-direction:column;gap:4px">
+        {% for r in ai_data.reasons %}
+        <li style="display:flex;gap:6px"><span style="color:var(--green)">✓</span>{{ r }}</li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+      {% if ai_data.concerns %}
+      <div style="font-size:12px;color:var(--muted);margin:8px 0 4px">顾虑</div>
+      <ul style="font-size:13px;list-style:none;display:flex;flex-direction:column;gap:4px">
+        {% for c in ai_data.concerns %}
+        <li style="display:flex;gap:6px"><span style="color:var(--amber)">⚠</span>{{ c }}</li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </div>
+    {% else %}
+    <div class="card card-body" style="text-align:center">
+      <div style="color:var(--muted);font-size:13px;margin-bottom:10px">尚未进行 AI 评分</div>
+      <button class="btn btn-primary btn-sm" style="width:100%" onclick="reScore()">🤖 立即评分</button>
+    </div>
+    {% endif %}
+
+    <!-- 编辑基础信息 -->
+    <div class="card">
+      <div class="card-header">基础信息</div>
+      <div class="card-body">
+        <form method="POST" action="/creator/{{ creator.channel_id }}/update">
+          <div class="form-group" style="margin-bottom:10px">
+            <label>昵称</label>
+            <input name="nickname" value="{{ creator.nickname or '' }}">
+          </div>
+          <div class="form-group" style="margin-bottom:10px">
+            <label>国家</label>
+            <input name="country" value="{{ creator.country or '' }}">
+          </div>
+          <div class="form-group" style="margin-bottom:10px">
+            <label>语言</label>
+            <input name="language" value="{{ creator.language or '' }}">
+          </div>
+          <div class="form-group" style="margin-bottom:10px">
+            <label>邮箱</label>
+            <input name="email" type="email" value="{{ creator.email or '' }}">
+          </div>
+          <div class="form-group" style="margin-bottom:10px">
+            <label>联系方式</label>
+            <input name="contact_info" value="{{ creator.contact_info or '' }}">
+          </div>
+          <div class="form-group" style="margin-bottom:10px">
+            <label>状态</label>
+            <select name="status_id">
+              <option value="">未设置</option>
+              {% for s in statuses %}
+              <option value="{{ s.id }}" {% if creator.status_id==s.id %}selected{% endif %}>{{ s.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom:10px">
+            <label>类目</label>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px">
+              {% for cat in categories %}
+              <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer">
+                <input type="checkbox" name="categories" value="{{ cat.id }}" {% if cat.id in cat_ids %}checked{% endif %}>
+                {{ cat.name }}
+              </label>
+              {% endfor %}
+            </div>
+          </div>
+          <div class="form-group" style="margin-bottom:12px">
+            <label>备注</label>
+            <textarea name="notes" rows="3">{{ creator.notes or '' }}</textarea>
+          </div>
+          <button type="submit" class="btn btn-primary" style="width:100%">保存</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- 归档 -->
+    {% if not creator.is_archived %}
+    <div class="card card-body">
+      <div style="font-size:13px;font-weight:600;margin-bottom:10px;color:var(--muted)">归档达人</div>
+      <form method="POST" action="/creator/{{ creator.channel_id }}/archive">
+        <select name="reason" style="margin-bottom:8px">
+          <option>Not Suitable</option>
+          <option>Rejected</option>
+          <option>Too Expensive</option>
+          <option>Blacklist</option>
+        </select>
+        <input name="note" placeholder="备注原因" style="margin-bottom:8px">
+        <button type="submit" class="btn btn-danger" style="width:100%">归档</button>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- 右栏：合作 & 历史 -->
+  <div style="display:flex;flex-direction:column;gap:16px">
+
+    <!-- 合作项目 -->
+    <div class="card">
+      <div class="card-header">
+        合作项目
+        <button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="openModal('modal-collab')">+ 新增合作</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>项目</th><th>品牌</th><th>阶段</th><th>金额</th><th>已付</th><th>发布日</th><th></th></tr></thead>
+          <tbody>
+            {% for cp in collabs %}
+            <tr>
+              <td>
+                <div style="font-weight:500">{{ cp.project_name }}</div>
+                <div style="font-size:11px;color:var(--muted)">{{ cp.product_name or '' }}</div>
+              </td>
+              <td><span class="badge badge-blue">{{ cp.brand_name }}</span></td>
+              <td>
+                {% if cp.stage_name %}
+                <span class="badge" style="background:{{ cp.stage_color }}22;color:{{ cp.stage_color }}">{{ cp.stage_name }}</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if cp.amount %}
+                <span style="font-weight:600">{{ cp.amount_currency }} {{ '{:,.0f}'.format(cp.amount) }}</span>
+                {% else %}—{% endif %}
+              </td>
+              <td>
+                {% if cp.paid_amount %}
+                <span class="text-green">{{ cp.paid_currency }} {{ '{:,.0f}'.format(cp.paid_amount) }}</span>
+                {% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+              <td style="font-size:12px">{{ cp.publish_date or '—' }}</td>
+              <td><button class="btn btn-sm btn-secondary" onclick="editCollab({{ cp|tojson|safe }})">编辑</button></td>
+            </tr>
+            {% else %}
+            <tr><td colspan="7" style="text-align:center;padding:24px;color:var(--muted)">暂无合作记录</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 提醒 -->
+    <div class="card">
+      <div class="card-header">
+        跟进提醒
+        <button class="btn btn-sm btn-secondary" style="margin-left:auto" onclick="openModal('modal-reminder')">+ 添加</button>
+      </div>
+      <div class="card-body" style="padding:12px 20px">
+        {% if reminders %}
+        <div class="timeline">
+          {% for r in reminders %}
+          <div class="timeline-item">
+            <div class="timeline-dot" style="background:var(--amber)"></div>
+            <div class="timeline-time">{{ r.remind_date }} · {{ r.project_name or '通用' }}</div>
+            <div class="timeline-content">{{ r.content or '—' }}
+              <button class="btn btn-sm btn-secondary" style="margin-left:8px" onclick="doneReminder({{ r.id }},this)">完成</button>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div style="color:var(--muted);font-size:13px">暂无提醒</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Interaction History -->
+    <div class="card">
+      <div class="card-header">
+        操作历史
+        <button class="btn btn-sm btn-secondary" style="margin-left:auto" onclick="openModal('modal-log')">+ 备注</button>
+      </div>
+      <div class="card-body">
+        {% if logs %}
+        <div class="timeline">
+          {% for log in logs %}
+          <div class="timeline-item">
+            <div class="timeline-dot"></div>
+            <div class="timeline-time">{{ log.created_at[:16] }} · {{ log.action_type }} {% if log.project_name %}· {{ log.project_name }}{% endif %}</div>
+            <div class="timeline-content">{{ log.content }}</div>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div style="color:var(--muted);font-size:13px">暂无记录</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: 新增/编辑合作 -->
+<div class="modal-backdrop" id="modal-collab">
+  <div class="modal" style="max-width:680px">
+    <div class="modal-header">合作记录 <button onclick="closeModal('modal-collab')" style="background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer">×</button></div>
+    <form method="POST" action="/collab/save">
+      <input type="hidden" name="creator_id" value="{{ creator.channel_id }}">
+      <input type="hidden" name="id" id="collab-id">
+      <div class="modal-body">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>项目</label>
+            <select name="project_id" id="collab-project" required>
+              <option value="">选择项目</option>
+              {% for p in projects %}
+              <option value="{{ p.id }}">{{ p.brand_name }} · {{ p.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group">
+            <label>阶段</label>
+            <select name="stage_id" id="collab-stage">
+              <option value="">选择阶段</option>
+              {% for s in stages %}
+              <option value="{{ s.id }}">{{ s.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group">
+            <label>合作金额</label>
+            <div class="input-group">
+              <input type="number" name="amount" id="collab-amount" placeholder="0">
+              <select name="amount_currency" id="collab-acurr">
+                <option>USD</option><option>EUR</option><option>HKD</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>已付款</label>
+            <div class="input-group">
+              <input type="number" name="paid_amount" id="collab-paid" placeholder="0">
+              <select name="paid_currency" id="collab-pcurr">
+                <option>USD</option><option>EUR</option><option>HKD</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>付款状态</label>
+            <select name="payment_status" id="collab-pstatus">
+              <option>Unpaid</option><option>Partial</option><option>Paid</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>邮箱</label>
+            <input name="email" id="collab-email" value="{{ creator.email or '' }}">
+          </div>
+          <div class="form-group">
+            <label>首次联系</label><input type="date" name="contacted_date" id="collab-contacted">
+          </div>
+          <div class="form-group">
+            <label>回复日期</label><input type="date" name="replied_date" id="collab-replied">
+          </div>
+          <div class="form-group">
+            <label>寄样日期</label><input type="date" name="sample_date" id="collab-sample">
+          </div>
+          <div class="form-group">
+            <label>草稿日期</label><input type="date" name="draft_date" id="collab-draft">
+          </div>
+          <div class="form-group">
+            <label>发布日期</label><input type="date" name="publish_date" id="collab-publish">
+          </div>
+          <div class="form-group">
+            <label>付款日期</label><input type="date" name="payment_date" id="collab-payment">
+          </div>
+          <div class="form-group full">
+            <label>备注</label><textarea name="notes" id="collab-notes" rows="2"></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('modal-collab')">取消</button>
+        <button type="submit" class="btn btn-primary">保存</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: 提醒 -->
+<div class="modal-backdrop" id="modal-reminder">
+  <div class="modal">
+    <div class="modal-header">添加提醒 <button onclick="closeModal('modal-reminder')" style="background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer">×</button></div>
+    <form method="POST" action="/reminder/save">
+      <input type="hidden" name="creator_id" value="{{ creator.channel_id }}">
+      <div class="modal-body">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>提醒日期</label><input type="date" name="remind_date" required>
+          </div>
+          <div class="form-group">
+            <label>关联项目</label>
+            <select name="project_id">
+              <option value="">不关联</option>
+              {% for p in projects %}
+              <option value="{{ p.id }}">{{ p.brand_name }} · {{ p.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group full">
+            <label>提醒内容</label>
+            <input name="content" placeholder="例：跟进报价 / 催稿 / 确认发布日期">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('modal-reminder')">取消</button>
+        <button type="submit" class="btn btn-primary">保存</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: 备注 -->
+<div class="modal-backdrop" id="modal-log">
+  <div class="modal">
+    <div class="modal-header">添加备注 <button onclick="closeModal('modal-log')" style="background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer">×</button></div>
+    <form method="POST" action="/log/save">
+      <input type="hidden" name="creator_id" value="{{ creator.channel_id }}">
+      <div class="modal-body">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>类型</label>
+            <select name="action_type">
+              <option>Note</option><option>Email</option><option>Call</option>
+              <option>Negotiation</option><option>Draft</option><option>Payment</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>关联项目</label>
+            <select name="project_id">
+              <option value="">不关联</option>
+              {% for p in projects %}
+              <option value="{{ p.id }}">{{ p.brand_name }} · {{ p.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group full">
+            <label>内容</label>
+            <textarea name="content" rows="3" placeholder="记录沟通内容、谈判进展..."></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('modal-log')">取消</button>
+        <button type="submit" class="btn btn-primary">保存</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+function editCollab(cp) {
+  const set = (id, val) => { const el = document.getElementById(id); if(el) el.value = val || ''; };
+  set('collab-id', cp.id);
+  set('collab-project', cp.project_id);
+  set('collab-stage', cp.stage_id);
+  set('collab-amount', cp.amount);
+  set('collab-acurr', cp.amount_currency || 'USD');
+  set('collab-paid', cp.paid_amount);
+  set('collab-pcurr', cp.paid_currency || 'USD');
+  set('collab-pstatus', cp.payment_status || 'Unpaid');
+  set('collab-email', cp.email);
+  set('collab-contacted', cp.contacted_date);
+  set('collab-replied', cp.replied_date);
+  set('collab-sample', cp.sample_date);
+  set('collab-draft', cp.draft_date);
+  set('collab-publish', cp.publish_date);
+  set('collab-payment', cp.payment_date);
+  set('collab-notes', cp.notes);
+  openModal('modal-collab');
+}
+
+async function doneReminder(id, btn) {
+  await fetch(`/reminder/${id}/done`, {method:'POST'});
+  btn.closest('.timeline-item').remove();
+}
+
+async function reScore() {
+  const r = await fetch(`/api/score/{{ creator.channel_id }}`, {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({})
+  });
+  const d = await r.json();
+  alert(`评分完成：${d.score}分 (${d.brand})\n\n${(d.reasons||[]).join('\n')}`);
+  location.reload();
+}
+
+// 点击背景关闭 modal
+document.querySelectorAll('.modal-backdrop').forEach(bd => {
+  bd.addEventListener('click', e => { if(e.target === bd) bd.classList.remove('open'); });
+});
+</script>
+{% endblock %}
