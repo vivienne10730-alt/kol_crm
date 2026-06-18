@@ -762,3 +762,8 @@ if __name__ == '__main__':
     init_db()
     # 0.0.0.0 支持局域网访问
     app.run(host='0.0.0.0', port=5000, debug=True)
+
+
+@app.route("/react")
+def react_app():
+    return render_template("react_app.html")
